@@ -24,10 +24,10 @@ class Linear(object):
         )
 
     def predict(self, data):
+        if self.coefficients is None:
+            raise ValueError("Need to fit data first.")
         if data.shape[1] != len(self.coefficients):
             raise ValueError("Bad data shape.")
-        if self.coefficients is None:
-            raise ValueError("Need to fit to data first.")
         print(np.matmul(data, self.coefficients))
 
 
