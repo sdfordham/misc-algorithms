@@ -28,12 +28,23 @@ class Linear(object):
             raise ValueError("Need to fit data first.")
         if data.shape[1] != len(self.coefficients):
             raise ValueError("Bad data shape.")
-        print(np.matmul(data, self.coefficients))
+        return np.matmul(data, self.coefficients)
 
 
 if __name__ == "__main__":
-    xy = np.random.randint(0, 100, size=(3, 4))
+    import matplotlib.pyplot as plt
+
+    sz = 100
+    e = np.random.normal(0, 10, sz)
+    m = np.random.random()
+    x = np.random.randint(0, sz, sz)
+    y = m * x + e
+
+    xy = np.vstack((x, y)).T
     r = Linear()
     r.fit(xy)
-    r.predict(xy[:, :-1])
+
+    plt.scatter(x, y)
+    plt.plot(x, r.predict(xy[:, :-1]))
+    plt.show()
 
