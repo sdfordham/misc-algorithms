@@ -1,2 +1,2 @@
-# ml-algorithms
-Handmade implementations of some common ML algorithms.
+# misc-algorithms
+Handmade implementations of some common algorithms.
