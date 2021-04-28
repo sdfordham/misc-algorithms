@@ -10,7 +10,7 @@ typedef struct {
     float theta;
     float theta_t;
 } Point;
-
+ 
 class ODE {
     public:
         virtual float at(float t, float theta, float theta_t) = 0;
