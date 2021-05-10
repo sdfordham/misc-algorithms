@@ -1,63 +1,59 @@
+import operator
 import numpy as np
-%matplotlib inline
+# %matplotlib inline
 import matplotlib.pyplot as plt
-
-data = np.loadtxt(r"spam.data")
-
-def perc_match(arr, label):
-    """
-    Proportion of label `label` observations in `arr`
-    """
-    return arr[arr[:, -1] == label].shape[0] / arr.shape[0]
-
-def node_class(arr):
-    """
-    Find class that maximizes argmax_k perc_match
-    """
-    max_p, klass = 0, None
-    for t in np.unique(arr[:, -1]):
-        p = perc_match(arr, t)
-        if p > max_p:
-            max_p, klass = p, t
-    return klass
-
-def gini_idx(arr):
-    """
-    Gini index
-    """
-    _sum = 0
-    for t in np.unique(arr[:, -1]):
-        p_mk = perc_match(arr, t)
-        _sum = _sum + p_mk * (1 - p_mk)
-    return _sum
 
 
 class Region:
-    def __init__(self, column_idx: int, split_val: float, data):
-        self.conditions = [(column_idx, split_val)]
+    def __init__(self, column_idx: int, split_val: float, oper: operator):
+        self.conditions = [(column_idx, split_val, oper)]
 
     def add_region(self, region):
-        for (idx, val) in region.conditions:
-            if (idx, val) not in self.conditions:
-                self.conditions.append((idx, val))
+        for (idx, val, oper) in region.conditions:
+            if (idx, val, oper) not in self.conditions:
+                self.conditions.append((idx, val, oper))
 
-    @property
-    def gini_idx(data):
-        pass
+    def gini_idx(self, arr: np.array) -> float:
+        _sum = 0
+        _arr = self._split_data(arr)
+        for t in np.unique(_arr[:, -1]):
+            p_mk = self._perc_match(_arr, t)
+            _sum = _sum + p_mk * (1 - p_mk)
+        return _sum
+
+    def best_label(self, arr: np.array) -> float:
+        max_p, klass = 0, None
+        _arr = self._split_data(arr)
+        for t in np.unique(_arr[:, -1]):
+            p = self._perc_match(_arr, t)
+            if p > max_p:
+                max_p, klass = p, t
+        return klass
+
+    def _split_data(self, arr: np.array) -> np.array:
+        _arr = arr.copy()
+        for (idx, val, oper) in self.conditions:
+            _arr = _arr[oper(_arr[:, idx], val)]
+        return _arr
+
+    def _perc_match(self, arr: np.array, label: float) -> float:
+        return arr[arr[:, -1] == label].shape[0] / arr.shape[0]
+
 
 def main():
+    data = np.loadtxt(r"tree-based\spam.data")
     COL = 0
     node_values_l = list()
     node_values_r = list()
     for s in np.unique(data[:, COL]):
-        left = data[data[:, COL] <= s]
-        right = data[data[:, COL] > s]
+        left = Region(COL, s, operator.le)
+        right = Region(COL, s, operator.gt)
 
-        left_class = node_class(left)
-        right_class = node_class(right)
+        left_class = left.best_label(data)
+        right_class = right.best_label(data)
 
-        node_values_l.append(gini_idx(left))
-        node_values_r.append(gini_idx(right))
+        node_values_l.append(left.gini_idx(data))
+        node_values_r.append(right.gini_idx(data))
 
     plt.plot(node_values_l)
     plt.plot(node_values_r)
