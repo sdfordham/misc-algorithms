@@ -58,35 +58,66 @@ def cost_complexity(regions: list[Region]) -> float:
     return sum([r.gini_idx * r.point_count for r in regions])
 
 
-def compare_sklearn():
+def compare_sklearn(max_depth=1):
     arr = np.loadtxt(r"tree-based\spam.data")
     
     X, y = arr[:, :-1], arr[:, -1]
-    clf = DecisionTreeClassifier(max_depth=1)
+    clf = DecisionTreeClassifier(max_depth=max_depth)
     clf.fit(X, y)
 
-    feature = clf.tree_.feature[0]
-    threshold = clf.tree_.threshold[0]
-
-    print(f"sklearn best first split: X[:, {feature}] <= {threshold:.5f}")
-
-
+    print("sklearn splits:")
+    for col, threshold in zip(clf.tree_.feature, clf.tree_.threshold):
+        if col >= 0:
+            print(f"\tX[:, {col}] <= {threshold:.5f}")
 
 def main():
     arr = np.loadtxt(r"tree-based\spam.data")
 
     costs = defaultdict(list)
-    for col in range(arr.shape[1] - 1):
+    cols = list(range(arr.shape[1] - 1))
+    min_cost, best_col, best_split = 1e6, None, None
+    for col in cols:
         for split in np.unique(arr[:, col]):
             left = Region(arr, col, split, operator.le)
             right = Region(arr, col, split, operator.gt)
-            costs[col].append((cost_complexity([left, right]), split))
+            cc = cost_complexity([left, right])
+            if cc < min_cost:
+                min_cost, best_col, best_split = cc, col, split
     
-    min_cc_per_col = [(min(v), k) for k, v in costs.items()]
-    (best_cost, best_split), best_col = sorted(min_cc_per_col)[0]
-    print(f"Best first split: X[:, {best_col}] <= {best_split} (cost complexity: {best_cost:.5f}).")
 
-    compare_sklearn()
+    print(f"Best first split: X[:, {best_col}] <= {best_split} (cost complexity: {min_cost:.5f}).")
+
+    best_left = Region(arr, best_col, best_split, operator.le)
+    best_right = Region(arr, best_col, best_split, operator.gt)
+    cols.pop(best_col)
+
+    min_cost, best_col, best_split = 1e6, None, None
+    for col in cols:
+        for split in np.unique(arr[:, col]):
+            left = Region(arr, col, split, operator.le)
+            left.add_region(best_left)
+            right = Region(arr, col, split, operator.gt)
+            right.add_region(best_left)
+            cc = cost_complexity([left, right])
+            if cc < min_cost:
+                min_cost, best_col, best_split = cc, col, split
+
+    print(f"Next split on left: X[:, {best_col}] <= {best_split} (cost complexity: {min_cost:.5f}).")
+
+    min_cost, best_col, best_split = 1e6, None, None
+    for col in cols:
+        for split in np.unique(arr[:, col]):
+            left = Region(arr, col, split, operator.le)
+            left.add_region(best_right)
+            right = Region(arr, col, split, operator.gt)
+            right.add_region(best_right)
+            cc = cost_complexity([left, right])
+            if cc < min_cost:
+                min_cost, best_col, best_split = cc, col, split
+
+    print(f"Next split on left: X[:, {best_col}] <= {best_split} (cost complexity: {min_cost:.5f}).")
+
+    compare_sklearn(2)
 
 
 if __name__ == "__main__":
