@@ -1,5 +1,4 @@
 import operator
-from collections import defaultdict
 import numpy as np
 from sklearn.tree import DecisionTreeClassifier
 
@@ -54,6 +53,15 @@ class Region:
         return _arr
 
 
+class TreeNode:
+    def __init__(self, root=False, parent=None) -> None:
+        self.root = root
+        self.parent = parent
+        self.regions = list()
+        self.left_child = None
+        self.right_child = None
+
+
 def cost_complexity(regions: list[Region]) -> float:
     return sum([r.gini_idx * r.point_count for r in regions])
 
@@ -73,47 +81,63 @@ def compare_sklearn(max_depth=1):
 def main():
     arr = np.loadtxt(r"tree-based\spam.data")
 
-    costs = defaultdict(list)
+    root = TreeNode(root=True)
     cols = list(range(arr.shape[1] - 1))
     min_cost, best_col, best_split = 1e6, None, None
     for col in cols:
         for split in np.unique(arr[:, col]):
-            left = Region(arr, col, split, operator.le)
-            right = Region(arr, col, split, operator.gt)
-            cc = cost_complexity([left, right])
+            left_region = Region(arr, col, split, operator.le)
+            right_region = Region(arr, col, split, operator.gt)
+            cc = cost_complexity([left_region, right_region])
             if cc < min_cost:
                 min_cost, best_col, best_split = cc, col, split
     
+    left_child, right_child = TreeNode(parent=root), TreeNode(parent=root)
+    root.left_child, root.right_child = left_child, right_child
+    left_child.regions.append(left_region)
+    right_child.regions.append(right_region)
 
     print(f"Best first split: X[:, {best_col}] <= {best_split} (cost complexity: {min_cost:.5f}).")
 
-    best_left = Region(arr, best_col, best_split, operator.le)
-    best_right = Region(arr, best_col, best_split, operator.gt)
     cols.pop(best_col)
 
     min_cost, best_col, best_split = 1e6, None, None
     for col in cols:
         for split in np.unique(arr[:, col]):
-            left = Region(arr, col, split, operator.le)
-            left.add_region(best_left)
-            right = Region(arr, col, split, operator.gt)
-            right.add_region(best_left)
-            cc = cost_complexity([left, right])
+            left_region = Region(arr, col, split, operator.le)
+            for region in left_child.regions:
+                left_region.add_region(region)
+            right_region = Region(arr, col, split, operator.gt)
+            for region in left_child.regions:
+                right_region.add_region(region)
+            cc = cost_complexity([left_region, right_region])
             if cc < min_cost:
                 min_cost, best_col, best_split = cc, col, split
+
+    left_left_child, right_left_child = TreeNode(parent=left_child), TreeNode(parent=left_child)
+    left_child.left_child, left_child.right_child = left_left_child, right_left_child
+    left_left_child.regions.append(left_region)
+    right_left_child.regions.append(right_region)
 
     print(f"Next split on left: X[:, {best_col}] <= {best_split} (cost complexity: {min_cost:.5f}).")
 
     min_cost, best_col, best_split = 1e6, None, None
     for col in cols:
         for split in np.unique(arr[:, col]):
-            left = Region(arr, col, split, operator.le)
-            left.add_region(best_right)
-            right = Region(arr, col, split, operator.gt)
-            right.add_region(best_right)
-            cc = cost_complexity([left, right])
+            left_region = Region(arr, col, split, operator.le)
+            for region in right_child.regions:
+                left_region.add_region(region)
+            right_region = Region(arr, col, split, operator.gt)
+            for region in right_child.regions:
+                right_region.add_region(region)
+            cc = cost_complexity([left_region, right_region])
             if cc < min_cost:
                 min_cost, best_col, best_split = cc, col, split
+
+    left_right_child, right_right_child = TreeNode(parent=right_child), TreeNode(parent=right_child)
+    right_child.left_child, right_child.right_child = left_right_child, right_right_child
+    left_right_child.regions.append(left_region)
+    right_right_child.regions.append(right_region)
 
     print(f"Next split on left: X[:, {best_col}] <= {best_split} (cost complexity: {min_cost:.5f}).")
 
