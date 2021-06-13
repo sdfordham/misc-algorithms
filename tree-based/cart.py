@@ -53,14 +53,43 @@ class Region:
         return _arr
 
 
-class TreeNode:
+class Node:
     def __init__(self, root=False, parent=None) -> None:
-        self.root = root
         self.parent = parent
         self.regions = list()
         self.left_child = None
         self.right_child = None
 
+
+class Tree:
+    def __init__(self, root: Node) -> None:
+        self.root = root
+
+
+def get_best_split(arr: np.array, cols: list, node: Node):
+    min_cost, best_col, best_split = 1e6, None, None
+    best_left, best_right = None, None
+    for col in cols:
+        for split in np.unique(arr[:, col]):
+            left_region = Region(arr, col, split, operator.le)
+            for region in node.regions:
+                left_region.add_region(region)
+            right_region = Region(arr, col, split, operator.gt)
+            for region in node.regions:
+                right_region.add_region(region)
+            cc = cost_complexity([left_region, right_region])
+            if cc < min_cost:
+                min_cost, best_col, best_split = cc, col, split
+                best_left, best_right = left_region, right_region
+    return (best_left, best_right), best_col, best_split
+
+
+def split_node(node: Node, left_region: Region, right_region: Region) -> tuple:
+    left_child, right_child = Node(parent=node), Node(parent=node)
+    node.left_child, node.right_child = left_child, right_child
+    left_child.regions.append(left_region)
+    right_child.regions.append(right_region)
+    return left_child, right_child
 
 def cost_complexity(regions: list[Region]) -> float:
     return sum([r.gini_idx * r.point_count for r in regions])
@@ -81,65 +110,23 @@ def compare_sklearn(max_depth=1):
 def main():
     arr = np.loadtxt(r"tree-based\spam.data")
 
-    root = TreeNode(root=True)
+    root = Node()
+    tree = Tree(root=root)
     cols = list(range(arr.shape[1] - 1))
-    min_cost, best_col, best_split = 1e6, None, None
-    for col in cols:
-        for split in np.unique(arr[:, col]):
-            left_region = Region(arr, col, split, operator.le)
-            right_region = Region(arr, col, split, operator.gt)
-            cc = cost_complexity([left_region, right_region])
-            if cc < min_cost:
-                min_cost, best_col, best_split = cc, col, split
-    
-    left_child, right_child = TreeNode(parent=root), TreeNode(parent=root)
-    root.left_child, root.right_child = left_child, right_child
-    left_child.regions.append(left_region)
-    right_child.regions.append(right_region)
 
-    print(f"Best first split: X[:, {best_col}] <= {best_split} (cost complexity: {min_cost:.5f}).")
+    (best_left, best_right), best_col, best_split = get_best_split(arr, cols, root)
+    left_child, right_child = split_node(root, best_left, best_right)
+    print(f"Best first split: X[:, {best_col}] <= {best_split}.")
 
     cols.pop(best_col)
 
-    min_cost, best_col, best_split = 1e6, None, None
-    for col in cols:
-        for split in np.unique(arr[:, col]):
-            left_region = Region(arr, col, split, operator.le)
-            for region in left_child.regions:
-                left_region.add_region(region)
-            right_region = Region(arr, col, split, operator.gt)
-            for region in left_child.regions:
-                right_region.add_region(region)
-            cc = cost_complexity([left_region, right_region])
-            if cc < min_cost:
-                min_cost, best_col, best_split = cc, col, split
+    (best_left, best_right), best_col, best_split = get_best_split(arr, cols, left_child)
+    left_left_child, right_left_child = split_node(left_child, best_left, best_right)
+    print(f"Next split on left: X[:, {best_col}] <= {best_split}")
 
-    left_left_child, right_left_child = TreeNode(parent=left_child), TreeNode(parent=left_child)
-    left_child.left_child, left_child.right_child = left_left_child, right_left_child
-    left_left_child.regions.append(left_region)
-    right_left_child.regions.append(right_region)
-
-    print(f"Next split on left: X[:, {best_col}] <= {best_split} (cost complexity: {min_cost:.5f}).")
-
-    min_cost, best_col, best_split = 1e6, None, None
-    for col in cols:
-        for split in np.unique(arr[:, col]):
-            left_region = Region(arr, col, split, operator.le)
-            for region in right_child.regions:
-                left_region.add_region(region)
-            right_region = Region(arr, col, split, operator.gt)
-            for region in right_child.regions:
-                right_region.add_region(region)
-            cc = cost_complexity([left_region, right_region])
-            if cc < min_cost:
-                min_cost, best_col, best_split = cc, col, split
-
-    left_right_child, right_right_child = TreeNode(parent=right_child), TreeNode(parent=right_child)
-    right_child.left_child, right_child.right_child = left_right_child, right_right_child
-    left_right_child.regions.append(left_region)
-    right_right_child.regions.append(right_region)
-
-    print(f"Next split on left: X[:, {best_col}] <= {best_split} (cost complexity: {min_cost:.5f}).")
+    (best_left, best_right), best_col, best_split = get_best_split(arr, cols, right_child)
+    left_right_child, right_right_child = split_node(right_child, best_left, best_right)
+    print(f"Next split on right: X[:, {best_col}] <= {best_split}")
 
     compare_sklearn(2)
 
