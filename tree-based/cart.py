@@ -1,5 +1,6 @@
 import operator
 import numpy as np
+from scipy.optimize import minimize_scalar
 from sklearn.tree import DecisionTreeClassifier
 
 
@@ -67,20 +68,30 @@ class Tree:
 
 
 def get_best_split(arr: np.array, cols: list, node: Node):
+    def _objective(arr, col, split):
+        left_region = Region(arr, col, split, operator.le)
+        for region in node.regions:
+            left_region.add_region(region)
+        right_region = Region(arr, col, split, operator.gt)
+        for region in node.regions:
+            right_region.add_region(region)
+        return cost_complexity([left_region, right_region])
+
     min_cost, best_col, best_split = 1e6, None, None
-    best_left, best_right = None, None
     for col in cols:
-        for split in np.unique(arr[:, col]):
-            left_region = Region(arr, col, split, operator.le)
-            for region in node.regions:
-                left_region.add_region(region)
-            right_region = Region(arr, col, split, operator.gt)
-            for region in node.regions:
-                right_region.add_region(region)
-            cc = cost_complexity([left_region, right_region])
-            if cc < min_cost:
-                min_cost, best_col, best_split = cc, col, split
-                best_left, best_right = left_region, right_region
+        res = minimize_scalar(
+            lambda s : _objective(arr, col, s),
+            bounds=[min(arr[:, col]), max(arr[:, col])]
+        )
+        if res.fun < min_cost:
+            min_cost, best_col, best_split = res.fun, col, res.x
+
+    best_left = Region(arr, best_col, best_split, operator.le)
+    for region in node.regions:
+        best_left.add_region(region)
+    best_right = Region(arr, best_col, best_split, operator.gt)
+    for region in node.regions:
+        best_right.add_region(region)
     return (best_left, best_right), best_col, best_split
 
 
