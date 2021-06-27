@@ -14,16 +14,26 @@ class Bandit:
         μ, σ = self.params[i]
         return rng.normal(μ, σ)
 
+    def __len__(self):
+        return len(self.params)
+
 
 def greedy_strategy(bandit: Bandit,
                     runs: int,
-                    ε: float = 0.0) -> tuple[list[float], list[float]]:
-    arms = len(bandit.params)
+                    ε: float = 0.0,
+                    initial_explore=False) -> tuple[list[float], list[float]]:
+    arms = len(bandit)
     action_values = [0] * arms
     counts = [0] * arms
     rewards = list()
 
-    for _ in range(runs):
+    if initial_explore:
+        # Do one full exploration
+        action_values = [bandit[i] for i in range(arms)]
+        counts = [1] * arms
+        rewards = action_values
+
+    for _ in range(runs - len(rewards)):
         uni = rng.uniform()
         if uni < 1 - ε:
             mx = max(action_values)
