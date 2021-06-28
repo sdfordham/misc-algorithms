@@ -21,9 +21,10 @@ class Bandit:
 def greedy_strategy(bandit: Bandit,
                     runs: int,
                     ε: float = 0.0,
+                    initial_action_value: int = 0.0,
                     initial_explore=False) -> tuple[list[float], list[float]]:
     arms = len(bandit)
-    action_values = [0] * arms
+    action_values = [initial_action_value] * arms
     counts = [0] * arms
     rewards = list()
 
@@ -57,13 +58,15 @@ def best_reward_perc(bandit: Bandit,
 if __name__ == "__main__":
     PARAMS = [(10, 1), (10.1, 1), (10.25, 1), (10.5, 1)]
     EPSILONS = (0.0, 0.01, 0.1)
+    INITIAL_ACTION_VALUE = 5.0
     RUNS = 10000
 
     bandit = Bandit(params=PARAMS)
     print(bandit, "\n")
 
     for ε in EPSILONS:
-        rewards, found = greedy_strategy(bandit, RUNS, ε)
+        rewards, found = greedy_strategy(bandit, RUNS, ε,
+                                         initial_action_value=INITIAL_ACTION_VALUE)
         print(f"ε = {ε}")
         print(f"Total reward: {sum(rewards):.3f}")
         print(f"Action values: {', '.join([f'{v:.3f}' for v in found])}\n")
