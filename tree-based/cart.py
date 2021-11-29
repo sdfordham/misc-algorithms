@@ -82,17 +82,32 @@ def main():
 
     res_root = get_best_splitter(arr, ignore_cols=ignore_cols)
     print(res_root)
-    ignore_cols.append(res_root.column_index)
 
     arr_left = arr[arr[:, res_root.column_index] <= res_root.split_value]
-    res_left = get_best_splitter(arr_left, ignore_cols=ignore_cols)
+    res_left = get_best_splitter(arr_left, ignore_cols=[res_root.column_index])
     print(res_left)
 
     arr_right = arr[arr[:, res_root.column_index] > res_root.split_value]
-    res_right = get_best_splitter(arr_right, ignore_cols=ignore_cols)
+    res_right = get_best_splitter(arr_right, ignore_cols=[res_root.column_index])
     print(res_right)
 
-    compare_sklearn(arr, 2)
+    arr_left_left = arr_left[arr_left[:, res_left.column_index] <= res_left.split_value]
+    res_left_left = get_best_splitter(arr_left_left, ignore_cols=[res_root.column_index, res_left.column_index])
+    print(res_left_left)
+
+    arr_left_right = arr_left[arr_left[:, res_left.column_index] > res_left.split_value]
+    res_left_right = get_best_splitter(arr_left_right, ignore_cols=[res_root.column_index, res_left.column_index])
+    print(res_left_right)
+
+    arr_right_left = arr_right[arr_right[:, res_right.column_index] <= res_right.split_value]
+    res_right_left = get_best_splitter(arr_right_left, ignore_cols=[res_root.column_index, res_right.column_index])
+    print(res_right_left)
+
+    arr_right_right = arr_right[arr_right[:, res_right.column_index] > res_right.split_value]
+    res_right_right = get_best_splitter(arr_right_right, ignore_cols=[res_root.column_index, res_right.column_index])
+    print(res_right_right)
+
+    compare_sklearn(arr, 3)
 
 
 if __name__ == "__main__":
