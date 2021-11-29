@@ -57,7 +57,7 @@ def get_best_splitter(arr: np.ndarray,
                 cc_right = (n_0r + n_1r) * gini_idx(n_0r, n_0r + n_1r)
                 if cc_left + cc_right < min_cc:
                     min_cc = cc_left + cc_right
-                    min_split = XX
+                    min_split = (XX + X[i + 1]) / 2
         best_splitters.append(
             Splitter(min_split, col, min_cc)
         )
