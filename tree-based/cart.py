@@ -1,114 +1,71 @@
-import operator
+from time import time
+from typing import Optional
+from collections import namedtuple
 import numpy as np
-from scipy.optimize import minimize_scalar
 from sklearn.tree import DecisionTreeClassifier
 
 
-class Region:
-    def __init__(self, data: np.array, column_idx: int, split_val: float, oper: operator):
-        self.conditions = [(column_idx, split_val, oper)]
-        self.data = data
-        self.data_restricted = self._split_data(data)
-        self.gini_idx = self._gini_idx
-        self.point_count = self._point_count
-
-    def add_region(self, region):
-        for (idx, val, oper) in region.conditions:
-            if (idx, val, oper) not in self.conditions:
-                self.conditions.append((idx, val, oper))
-
-        # Update
-        self.data_restricted = self._split_data(self.data)
-        self.gini_idx = self._gini_idx
-        self.point_count = self._point_count
-
-    @property
-    def _gini_idx(self) -> float:
-        _sum = 0
-        for t in np.unique(self.data_restricted[:, -1]):
-            p_mk = self._perc_match(t)
-            _sum = _sum + p_mk * (1 - p_mk)
-        return _sum
-
-    @property
-    def best_label(self) -> float:
-        max_p, klass = 0, None
-        for t in np.unique(self.data_restricted[:, -1]):
-            p = self._perc_match(t)
-            if p > max_p:
-                max_p, klass = p, t
-        return klass
-
-    @property
-    def _point_count(self) -> int:
-        return self.data_restricted.shape[0]
-
-    def _perc_match(self, label: float) -> float:
-        matched = self.data_restricted[self.data_restricted[:, -1] == label].shape[0]
-        return matched / self.data_restricted.shape[0]
-    
-    def _split_data(self, arr: np.array) -> np.array:
-        _arr = arr.copy()
-        for (idx, val, oper) in self.conditions:
-            _arr = _arr[oper(_arr[:, idx], val)]
-        return _arr
+Splitter = namedtuple('Splitter', ['split_value', 'column_index', 'cost_complexity'])
 
 
-class Node:
-    def __init__(self, root=False, parent=None) -> None:
-        self.parent = parent
-        self.regions = list()
-        self.left_child = None
-        self.right_child = None
+def timing(f: callable):
+    def wrapped(*args, **kwargs):
+        start = time()
+        res = f(*args, **kwargs)
+        end = time()
+        print(f'{f.__name__} took {end - start:.4f}')
+        return res
+    return wrapped
 
 
-class Tree:
-    def __init__(self, root: Node) -> None:
-        self.root = root
+def gini_idx(n_0: int, n_tot: int) -> float:
+    p_0 = n_0 / n_tot
+    return 2 * p_0 * (1 - p_0)
 
 
-def get_best_split(arr: np.array, cols: list, node: Node):
-    def _objective(arr, col, split):
-        left_region = Region(arr, col, split, operator.le)
-        for region in node.regions:
-            left_region.add_region(region)
-        right_region = Region(arr, col, split, operator.gt)
-        for region in node.regions:
-            right_region.add_region(region)
-        return cost_complexity([left_region, right_region])
+@timing
+def get_best_splitter(arr: np.ndarray,
+                      ignore_cols: Optional[list[int]] = None) -> Splitter:
+    n_tot = arr.shape[0]
+    n_tot_0 = sum(arr[:, -1] == 0.)
+    n_tot_1 = sum(arr[:, -1] == 1.)
 
-    min_cost, best_col, best_split = 1e6, None, None
-    for col in cols:
-        res = minimize_scalar(
-            lambda s : _objective(arr, col, s),
-            bounds=[min(arr[:, col]), max(arr[:, col])]
+    best_splitters = list()
+    for col in range(arr.shape[1] - 1):
+        if ignore_cols and col in ignore_cols:
+            continue
+
+        arr_sorted = arr[arr[:, col].argsort()]  # sort
+        X, y = arr_sorted[:, col], arr_sorted[:, -1]
+
+        n_0l, n_1l = 0, 0
+        n_0r, n_1r = n_tot_0, n_tot_1
+
+        min_split, min_cc = None, 1e6
+        for i in range(n_tot):
+            XX, yy = X[i], y[i]
+
+            if yy == 1:
+                n_1l += 1
+                n_1r -= 1
+            elif yy == 0:
+                n_0l += 1
+                n_0r -= 1
+
+            if i == n_tot - 1 or XX != X[i + 1]:
+                cc_left = (n_0l + n_1l) * gini_idx(n_0l, n_0l + n_1l)
+                cc_right = (n_0r + n_1r) * gini_idx(n_0r, n_0r + n_1r)
+                if cc_left + cc_right < min_cc:
+                    min_cc = cc_left + cc_right
+                    min_split = XX
+        best_splitters.append(
+            Splitter(min_split, col, min_cc)
         )
-        if res.fun < min_cost:
-            min_cost, best_col, best_split = res.fun, col, res.x
-
-    best_left = Region(arr, best_col, best_split, operator.le)
-    for region in node.regions:
-        best_left.add_region(region)
-    best_right = Region(arr, best_col, best_split, operator.gt)
-    for region in node.regions:
-        best_right.add_region(region)
-    return (best_left, best_right), best_col, best_split
+    return sorted(best_splitters, key=lambda x: x.cost_complexity)[0]
 
 
-def split_node(node: Node, left_region: Region, right_region: Region) -> tuple:
-    left_child, right_child = Node(parent=node), Node(parent=node)
-    node.left_child, node.right_child = left_child, right_child
-    left_child.regions.append(left_region)
-    right_child.regions.append(right_region)
-    return left_child, right_child
-
-def cost_complexity(regions: list[Region]) -> float:
-    return sum([r.gini_idx * r.point_count for r in regions])
-
-
-def compare_sklearn(max_depth=1):
-    arr = np.loadtxt(r"tree-based\spam.data")
-    
+@timing
+def compare_sklearn(arr: np.ndarray, max_depth=1) -> None:
     X, y = arr[:, :-1], arr[:, -1]
     clf = DecisionTreeClassifier(max_depth=max_depth)
     clf.fit(X, y)
@@ -118,29 +75,26 @@ def compare_sklearn(max_depth=1):
         if col >= 0:
             print(f"\tX[:, {col}] <= {threshold:.5f}")
 
+
 def main():
-    arr = np.loadtxt(r"tree-based\spam.data")
+    arr = np.loadtxt('spam.data')
+    ignore_cols = list()
 
-    root = Node()
-    tree = Tree(root=root)
-    cols = list(range(arr.shape[1] - 1))
+    res_root = get_best_splitter(arr, ignore_cols=ignore_cols)
+    print(res_root)
+    ignore_cols.append(res_root.column_index)
 
-    (best_left, best_right), best_col, best_split = get_best_split(arr, cols, root)
-    left_child, right_child = split_node(root, best_left, best_right)
-    print(f"Best first split: X[:, {best_col}] <= {best_split}.")
+    arr_left = arr[arr[:, res_root.column_index] <= res_root.split_value]
+    res_left = get_best_splitter(arr_left, ignore_cols=ignore_cols)
+    print(res_left)
 
-    cols.pop(best_col)
+    arr_right = arr[arr[:, res_root.column_index] > res_root.split_value]
+    res_right = get_best_splitter(arr_right, ignore_cols=ignore_cols)
+    print(res_right)
 
-    (best_left, best_right), best_col, best_split = get_best_split(arr, cols, left_child)
-    left_left_child, right_left_child = split_node(left_child, best_left, best_right)
-    print(f"Next split on left: X[:, {best_col}] <= {best_split}")
-
-    (best_left, best_right), best_col, best_split = get_best_split(arr, cols, right_child)
-    left_right_child, right_right_child = split_node(right_child, best_left, best_right)
-    print(f"Next split on right: X[:, {best_col}] <= {best_split}")
-
-    compare_sklearn(2)
+    compare_sklearn(arr, 2)
 
 
 if __name__ == "__main__":
     main()
+
