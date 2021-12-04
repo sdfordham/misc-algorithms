@@ -1,6 +1,8 @@
 from time import time
 from typing import Optional
 from collections import namedtuple
+from dataclasses import dataclass
+
 import numpy as np
 from sklearn.tree import DecisionTreeClassifier
 
@@ -13,7 +15,7 @@ def timing(f: callable):
         start = time()
         res = f(*args, **kwargs)
         end = time()
-        print(f'{f.__name__} took {end - start:.4f}')
+        print(f'{f.__name__} took {end - start:.4f} seconds.')
         return res
     return wrapped
 
@@ -23,7 +25,6 @@ def gini_idx(n_0: int, n_tot: int) -> float:
     return 2 * p_0 * (1 - p_0)
 
 
-@timing
 def get_best_splitter(arr: np.ndarray,
                       ignore_cols: Optional[list[int]] = None) -> Splitter:
     n_tot = arr.shape[0]
@@ -64,6 +65,55 @@ def get_best_splitter(arr: np.ndarray,
     return sorted(best_splitters, key=lambda x: x.cost_complexity)[0]
 
 
+@dataclass
+class DecisionTreeNode:
+    child_left: Optional['DecisionTreeNode'] = None
+    child_right: Optional['DecisionTreeNode'] = None
+    used_columns: Optional[int] = None
+    arr: Optional[np.ndarray] = None
+
+
+class DecisionTree:
+    def __init__(self) -> None:
+        self.root = DecisionTreeNode()
+
+    def _split_node(self,
+                    arr: np.ndarray,
+                    node: DecisionTreeNode,
+                    ignore_cols: Optional[list[int]] = None) -> None:
+        s = get_best_splitter(arr, ignore_cols=ignore_cols)
+
+        used_columns = [s.column_index]
+        if ignore_cols:
+            used_columns = ignore_cols + used_columns
+
+        node.child_left = DecisionTreeNode(
+            used_columns=used_columns,
+            arr=arr[arr[:, s.column_index] <= s.split_value]
+        )
+        node.child_right = DecisionTreeNode(
+            used_columns=[s.column_index],
+            arr=arr[arr[:, s.column_index] > s.split_value]
+        )
+
+    @timing
+    def fit(self, arr: np.ndarray, max_depth: int) -> None:
+        assert max_depth >= 1
+        assert self.root.child_left is None and self.root.child_right is None
+
+        self.root.arr = arr
+        self._split_node(arr, self.root)
+
+        leaves = [self.root.child_left, self.root.child_right]
+        for _ in range(max_depth - 1):
+            new_leaves = list()
+            for leaf in leaves:
+                self._split_node(leaf.arr, leaf, ignore_cols=leaf.used_columns)
+                new_leaves.append(leaf.child_left)
+                new_leaves.append(leaf.child_right)
+            leaves = new_leaves
+
+
 @timing
 def compare_sklearn(arr: np.ndarray, max_depth=1) -> None:
     X, y = arr[:, :-1], arr[:, -1]
@@ -78,38 +128,11 @@ def compare_sklearn(arr: np.ndarray, max_depth=1) -> None:
 
 def main():
     arr = np.loadtxt('spam.data')
-    ignore_cols = list()
+    clf = DecisionTree()
+    clf.fit(arr, max_depth=2)
 
-    res_root = get_best_splitter(arr, ignore_cols=ignore_cols)
-    print(res_root)
-
-    arr_left = arr[arr[:, res_root.column_index] <= res_root.split_value]
-    res_left = get_best_splitter(arr_left, ignore_cols=[res_root.column_index])
-    print(res_left)
-
-    arr_right = arr[arr[:, res_root.column_index] > res_root.split_value]
-    res_right = get_best_splitter(arr_right, ignore_cols=[res_root.column_index])
-    print(res_right)
-
-    arr_left_left = arr_left[arr_left[:, res_left.column_index] <= res_left.split_value]
-    res_left_left = get_best_splitter(arr_left_left, ignore_cols=[res_root.column_index, res_left.column_index])
-    print(res_left_left)
-
-    arr_left_right = arr_left[arr_left[:, res_left.column_index] > res_left.split_value]
-    res_left_right = get_best_splitter(arr_left_right, ignore_cols=[res_root.column_index, res_left.column_index])
-    print(res_left_right)
-
-    arr_right_left = arr_right[arr_right[:, res_right.column_index] <= res_right.split_value]
-    res_right_left = get_best_splitter(arr_right_left, ignore_cols=[res_root.column_index, res_right.column_index])
-    print(res_right_left)
-
-    arr_right_right = arr_right[arr_right[:, res_right.column_index] > res_right.split_value]
-    res_right_right = get_best_splitter(arr_right_right, ignore_cols=[res_root.column_index, res_right.column_index])
-    print(res_right_right)
-
-    compare_sklearn(arr, 3)
+    compare_sklearn(arr, max_depth=2)
 
 
 if __name__ == "__main__":
     main()
-
